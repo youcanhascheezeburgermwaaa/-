@@ -1,0 +1,569 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, Download, Type, Palette, Image as ImageIcon, X, ZoomIn, Move, Check } from 'lucide-react';
+
+// Gmarket Sans Font Import via Style
+const FontStyles = () => (
+  <style>{`
+    @import url('https://cdn.jsdelivr.net/gh/webfontworld/gmarket/GmarketSans.css');
+    
+    .font-gmarket-light { font-family: 'GmarketSans', sans-serif; font-weight: 300; }
+    .font-gmarket-medium { font-family: 'GmarketSans', sans-serif; font-weight: 500; }
+    .font-gmarket-bold { font-family: 'GmarketSans', sans-serif; font-weight: 700; }
+    
+    /* Custom Scrollbar for modern look */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #1f2937; }
+    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+  `}</style>
+);
+
+export default function GithubCardMaker() {
+  // --- States ---
+  const [texts, setTexts] = useState({
+    title: "제목을 입력하세요",
+    tag1: "키워드1",
+    tag2: "키워드2",
+    tag3: "키워드3",
+    episode: "001",
+  });
+
+  const [style, setStyle] = useState({
+    textColor: "#ffffff",
+    baseFontSize: 60, // Base size for Title (scaled down for others)
+    shadow: true,
+  });
+
+  const [image, setImage] = useState({
+    src: null,         // Cropped result
+    originalSrc: null, // For editing
+  });
+
+  // --- Crop Modal States ---
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+  const [cropScale, setCropScale] = useState(1);
+  const [cropPos, setCropPos] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const cropImageRef = useRef(null);
+  
+  // --- Constants ---
+  const CANVAS_SIZE = 1024;
+  const PHONE_NUMBER = "010-8572-1374";
+
+  // --- Handlers ---
+  const handleTextChange = (key, value) => {
+    setTexts(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setImage(prev => ({ ...prev, originalSrc: event.target.result }));
+        // Reset crop states
+        setCropScale(1);
+        setCropPos({ x: 0, y: 0 });
+        setIsCropModalOpen(true);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // --- Cropping Logic (Pan & Zoom) ---
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - cropPos.x, y: e.clientY - cropPos.y });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    setCropPos({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  const performCrop = () => {
+    // Determine the visible area in the 400x400 viewing box and draw to 1024x1024 canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = CANVAS_SIZE;
+    canvas.height = CANVAS_SIZE;
+    const ctx = canvas.getContext('2d');
+    
+    const img = new Image();
+    img.src = image.originalSrc;
+    img.onload = () => {
+        // The viewer is 400px. The scale is applied to the image.
+        // We need to map the viewer coordinates to the actual canvas coordinates.
+        // Ratio: 1024 / 400 = 2.56
+        const ratio = CANVAS_SIZE / 400;
+        
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+        // Save context for transform
+        ctx.save();
+        // Move to center to apply scale from center
+        ctx.translate(CANVAS_SIZE / 2, CANVAS_SIZE / 2);
+        ctx.scale(cropScale, cropScale);
+        ctx.translate(-CANVAS_SIZE / 2, -CANVAS_SIZE / 2);
+        
+        // Draw image with position offset adjusted by ratio
+        ctx.drawImage(
+            img, 
+            (cropPos.x * ratio) + (CANVAS_SIZE - img.width * ratio) / 2, // Center initial logic roughly
+            (cropPos.y * ratio) + (CANVAS_SIZE - img.height * ratio) / 2,
+            img.width * ratio, 
+            img.height * ratio
+        );
+        ctx.restore();
+
+        setImage(prev => ({ ...prev, src: canvas.toDataURL('image/png') }));
+        setIsCropModalOpen(false);
+    };
+  };
+
+  // --- Download Logic (Canvas Generation) ---
+  const handleDownload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = CANVAS_SIZE;
+    canvas.height = CANVAS_SIZE;
+    const ctx = canvas.getContext('2d');
+
+    // 1. Background
+    if (image.src) {
+      const img = new Image();
+      img.src = image.src;
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+        drawText(ctx);
+        triggerDownload(canvas);
+      };
+    } else {
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      drawText(ctx);
+      triggerDownload(canvas);
+    }
+  };
+
+  const drawText = (ctx) => {
+    const centerX = CANVAS_SIZE / 2;
+    const centerY = CANVAS_SIZE / 2;
+    
+    // Shadow Settings
+    if (style.shadow) {
+        ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 4;
+        ctx.shadowOffsetY = 4;
+    } else {
+        ctx.shadowColor = "transparent";
+    }
+
+    ctx.fillStyle = style.textColor;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // Font Sizes
+    const titleSize = style.baseFontSize * 1.5; // Scale up a bit for 1024 resolution
+    const subSize = titleSize * 0.35;
+    const phoneSize = titleSize * 0.30;
+
+    // 1. Episode (Top)
+    ctx.font = `300 ${subSize}px 'GmarketSans'`;
+    ctx.fillText(`Episode: ${texts.episode}`, centerX, centerY - titleSize * 1.5);
+
+    // 2. Title (Center)
+    ctx.font = `700 ${titleSize}px 'GmarketSans'`;
+    // Using word-aware wrapping for title
+    wrapText(ctx, texts.title, centerX, centerY, CANVAS_SIZE - 100, titleSize * 1.2);
+
+    // 3. Hashtags (Bottom)
+    ctx.font = `300 ${subSize}px 'GmarketSans'`;
+    const hashtags = `#${texts.tag1}   #${texts.tag2}   #${texts.tag3}`;
+    // Using wrapText for hashtags too, to ensure centering on wrap
+    wrapText(ctx, hashtags, centerX, centerY + titleSize * 1.5, CANVAS_SIZE - 150, subSize * 1.5);
+
+    // 4. Phone (Footer)
+    ctx.font = `300 ${phoneSize}px 'GmarketSans'`;
+    ctx.fillText(`TEL : ${PHONE_NUMBER}`, centerX, CANVAS_SIZE - 60);
+  };
+
+  // Improved Helper for text wrapping (Word-aware)
+  const wrapText = (ctx, text, x, y, maxWidth, lineHeight) => {
+    // 1. Try splitting by newlines first (user entered)
+    const paragraphs = text.split('\n');
+    let allLines = [];
+
+    paragraphs.forEach(paragraph => {
+        // 2. Try splitting by spaces to preserve words
+        const words = paragraph.split(' ');
+        let currentLine = words[0];
+
+        for (let i = 1; i < words.length; i++) {
+            const word = words[i];
+            const width = ctx.measureText(currentLine + " " + word).width;
+            if (width < maxWidth) {
+                currentLine += " " + word;
+            } else {
+                allLines.push(currentLine);
+                currentLine = word;
+            }
+        }
+        
+        // Handle single long words (fallback to char splitting if a line is still too long)
+        if (ctx.measureText(currentLine).width > maxWidth) {
+             // Force split by characters for very long words
+             const chars = currentLine.split('');
+             let charLine = '';
+             for (let c of chars) {
+                 if (ctx.measureText(charLine + c).width < maxWidth) {
+                     charLine += c;
+                 } else {
+                     allLines.push(charLine);
+                     charLine = c;
+                 }
+             }
+             allLines.push(charLine);
+        } else {
+             allLines.push(currentLine);
+        }
+    });
+
+    // Draw lines centered vertically around y
+    const totalHeight = allLines.length * lineHeight;
+    let startY = y - (totalHeight / 2) + (lineHeight / 2);
+
+    for (let i = 0; i < allLines.length; i++) {
+        ctx.fillText(allLines[i], x, startY + (i * lineHeight));
+    }
+  };
+
+  const triggerDownload = (canvas) => {
+    const link = document.createElement('a');
+    link.download = `episode_${texts.episode}_card.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+
+  return (
+    <div className="flex flex-col min-h-screen bg-gray-900 text-gray-100 font-sans">
+      <FontStyles />
+      
+      {/* Header */}
+      <header className="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <Type className="w-5 h-5 text-white" />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight">Github Card Maker</h1>
+          </div>
+          <button 
+            onClick={handleDownload}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg transition-colors font-medium text-sm"
+          >
+            <Download className="w-4 h-4" />
+            다운로드 (PNG)
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-7xl mx-auto w-full p-4 lg:p-8 grid lg:grid-cols-2 gap-8">
+        
+        {/* Left Column: Editor Controls */}
+        <div className="space-y-6 overflow-y-auto custom-scrollbar">
+          
+          {/* Section 1: Content Input */}
+          <div className="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700">
+            <h2 className="text-sm uppercase tracking-wider text-gray-400 font-semibold mb-4 flex items-center gap-2">
+              <Type className="w-4 h-4" /> 텍스트 입력
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">에피소드 번호</label>
+                <div className="flex items-center bg-gray-900 rounded-lg border border-gray-600 px-3 py-2 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+                  <span className="text-gray-500 font-gmarket-light mr-2 select-none">Episode:</span>
+                  <input
+                    type="text"
+                    value={texts.episode}
+                    onChange={(e) => handleTextChange('episode', e.target.value)}
+                    className="bg-transparent border-none outline-none w-full text-white font-gmarket-light placeholder-gray-600"
+                    placeholder="001"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">메인 제목</label>
+                <textarea
+                  value={texts.title}
+                  onChange={(e) => handleTextChange('title', e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-3 text-white font-gmarket-bold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none h-24 text-lg"
+                  placeholder="제목을 입력하세요 (자동 줄바꿈)"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                {['tag1', 'tag2', 'tag3'].map((tagKey, idx) => (
+                  <div key={tagKey}>
+                    <label className="text-xs text-gray-400 mb-1 block">키워드 {idx + 1}</label>
+                    <div className="flex items-center bg-gray-900 rounded-lg border border-gray-600 px-2 py-2 focus-within:border-blue-500">
+                      <span className="text-gray-500 text-sm mr-1">#</span>
+                      <input
+                        type="text"
+                        value={texts[tagKey]}
+                        onChange={(e) => handleTextChange(tagKey, e.target.value)}
+                        className="bg-transparent border-none outline-none w-full text-sm text-white font-gmarket-light"
+                        placeholder="태그"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Visual Style */}
+          <div className="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700">
+            <h2 className="text-sm uppercase tracking-wider text-gray-400 font-semibold mb-4 flex items-center gap-2">
+              <Palette className="w-4 h-4" /> 스타일 설정
+            </h2>
+            
+            <div className="space-y-6">
+              {/* Image Upload */}
+              <div>
+                <label className="text-xs text-gray-400 mb-2 block">배경 이미지</label>
+                <div className="flex items-center gap-3">
+                  <label className="flex-1 cursor-pointer bg-gray-700 hover:bg-gray-600 text-white py-3 px-4 rounded-lg text-center transition-colors border border-dashed border-gray-500 hover:border-blue-400 flex items-center justify-center gap-2">
+                    <ImageIcon className="w-4 h-4" />
+                    <span>이미지 업로드 및 크롭</span>
+                    <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+                  </label>
+                  {image.src && (
+                     <button 
+                       onClick={() => setImage(prev => ({...prev, src: null}))}
+                       className="p-3 bg-red-900/50 text-red-400 rounded-lg hover:bg-red-900/80 border border-red-800"
+                       title="배경 삭제"
+                     >
+                       <X className="w-5 h-5" />
+                     </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Color Picker */}
+              <div>
+                <label className="text-xs text-gray-400 mb-2 block">글자 색상</label>
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="color" 
+                    value={style.textColor} 
+                    onChange={(e) => setStyle(prev => ({...prev, textColor: e.target.value}))}
+                    className="h-10 w-16 bg-transparent border-none cursor-pointer rounded overflow-hidden" 
+                  />
+                  <div className="flex-1 bg-gray-900 rounded-lg px-3 py-2 text-sm font-mono text-gray-300 border border-gray-600">
+                    {style.textColor}
+                  </div>
+                </div>
+              </div>
+
+              {/* Font Size Slider */}
+              <div>
+                 <div className="flex justify-between mb-1">
+                    <label className="text-xs text-gray-400">폰트 크기 비율</label>
+                    <span className="text-xs text-gray-500">{style.baseFontSize}px</span>
+                 </div>
+                 <input 
+                    type="range" 
+                    min="30" 
+                    max="100" 
+                    value={style.baseFontSize} 
+                    onChange={(e) => setStyle(prev => ({...prev, baseFontSize: Number(e.target.value)}))}
+                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                 />
+              </div>
+
+              {/* Shadow Toggle */}
+              <div className="flex items-center justify-between bg-gray-900 p-3 rounded-lg border border-gray-600">
+                <span className="text-sm text-gray-300">텍스트 그림자 효과 (가독성 향상)</span>
+                <button 
+                  onClick={() => setStyle(prev => ({...prev, shadow: !prev.shadow}))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${style.shadow ? 'bg-blue-600' : 'bg-gray-600'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${style.shadow ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Live Preview */}
+        <div className="flex flex-col items-center justify-start sticky top-24">
+           <div className="text-sm text-gray-400 mb-2 w-full text-center flex justify-between px-2">
+             <span>Live Preview</span>
+             <span className="text-xs opacity-50">1024 x 1024 output</span>
+           </div>
+           
+           {/* The Preview Container - Maintains Aspect Ratio 1:1 */}
+           <div 
+             className="relative w-full aspect-square bg-black rounded-xl overflow-hidden shadow-2xl border border-gray-700 select-none group"
+             style={{ maxWidth: '600px' }}
+           >
+              {/* Background Layer */}
+              {image.src && (
+                <img 
+                  src={image.src} 
+                  alt="Background" 
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              )}
+              
+              {/* Text Layer Overlay */}
+              <div 
+                className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center"
+                style={{ 
+                    color: style.textColor,
+                    textShadow: style.shadow ? "4px 4px 4px rgba(0,0,0,0.8)" : "none"
+                }}
+              >
+                 {/* 1. Episode (Top) */}
+                 <div 
+                    className="font-gmarket-light mb-[4%]"
+                    style={{ fontSize: `${style.baseFontSize * 0.35}px` }}
+                 >
+                    Episode: {texts.episode}
+                 </div>
+
+                 {/* 2. Main Title (Center) */}
+                 <div 
+                    className="font-gmarket-bold w-full text-center px-4"
+                    style={{ 
+                        fontSize: `${style.baseFontSize}px`,
+                        wordBreak: 'keep-all',    // Keeps words together for Korean
+                        overflowWrap: 'break-word', // Breaks very long words
+                        whiteSpace: 'pre-wrap',   // Respects user newlines
+                        lineHeight: 1.2
+                    }}
+                 >
+                    {texts.title}
+                 </div>
+
+                 {/* 3. Hashtags (Bottom) */}
+                 <div 
+                    className="font-gmarket-light mt-[4%] flex flex-wrap justify-center gap-x-[1em] gap-y-[0.2em] px-4 text-center w-full"
+                    style={{ fontSize: `${style.baseFontSize * 0.35}px` }}
+                 >
+                    <span>#{texts.tag1}</span>
+                    <span>#{texts.tag2}</span>
+                    <span>#{texts.tag3}</span>
+                 </div>
+
+                 {/* 4. Phone Number (Absolute Bottom) */}
+                 <div 
+                   className="absolute bottom-[6%] font-gmarket-light tracking-wider"
+                   style={{ fontSize: `${style.baseFontSize * 0.30}px` }}
+                 >
+                    TEL : {PHONE_NUMBER}
+                 </div>
+              </div>
+           </div>
+           <p className="mt-4 text-xs text-gray-500 text-center max-w-md">
+             * 미리보기 화면은 실제 다운로드될 이미지와 다르게 보여질 수 있습니다. <br/>
+             * 다운로드 버튼을 누르면 원본 품질(1024x1024)로 저장됩니다.
+           </p>
+        </div>
+      </main>
+
+      {/* Crop Modal */}
+      {isCropModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
+          <div className="bg-gray-800 rounded-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+              <h3 className="text-white font-bold flex items-center gap-2">
+                <Move className="w-4 h-4" /> 배경 영역 선택
+              </h3>
+              <button onClick={() => setIsCropModalOpen(false)} className="text-gray-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="relative bg-gray-900 w-full aspect-square overflow-hidden cursor-move touch-none"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={(e) => handleMouseDown(e.touches[0])}
+                onTouchMove={(e) => handleMouseMove(e.touches[0])}
+                onTouchEnd={handleMouseUp}
+            >
+                {/* Instruction Overlay */}
+                <div className="absolute top-2 left-2 z-20 bg-black/50 text-xs text-white px-2 py-1 rounded pointer-events-none">
+                    드래그하여 위치 이동
+                </div>
+
+                {/* The Image being transformed */}
+                {image.originalSrc && (
+                    <div 
+                        className="w-full h-full flex items-center justify-center pointer-events-none"
+                    >
+                         <img 
+                            ref={cropImageRef}
+                            src={image.originalSrc}
+                            alt="To Crop"
+                            style={{
+                                transform: `translate(${cropPos.x}px, ${cropPos.y}px) scale(${cropScale})`,
+                                maxWidth: 'none', // Allow image to be larger than container
+                                maxHeight: 'none',
+                            }}
+                            draggable={false}
+                         />
+                    </div>
+                )}
+                
+                {/* The Crop Guidelines (Fixed Grid) */}
+                <div className="absolute inset-0 border-2 border-white/30 pointer-events-none grid grid-cols-3 grid-rows-3">
+                    <div className="border-r border-b border-white/10"></div>
+                    <div className="border-r border-b border-white/10"></div>
+                    <div className="border-b border-white/10"></div>
+                    <div className="border-r border-b border-white/10"></div>
+                    <div className="border-r border-b border-white/10"></div>
+                    <div className="border-b border-white/10"></div>
+                    <div className="border-r border-white/10"></div>
+                    <div className="border-r border-white/10"></div>
+                    <div></div>
+                </div>
+            </div>
+
+            <div className="p-4 space-y-4 bg-gray-800">
+                <div className="flex items-center gap-4">
+                    <ZoomIn className="w-5 h-5 text-gray-400" />
+                    <input 
+                        type="range" 
+                        min="0.5" 
+                        max="3" 
+                        step="0.1" 
+                        value={cropScale} 
+                        onChange={(e) => setCropScale(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    />
+                </div>
+                <button 
+                    onClick={performCrop}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold flex items-center justify-center gap-2 transition-colors"
+                >
+                    <Check className="w-5 h-5" />
+                    이 영역으로 설정하기
+                </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
