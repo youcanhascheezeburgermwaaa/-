@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1024x1024 템플릿 자동 생성기</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Cropper.js CDN for Image Cropping -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
+    <!-- html2canvas CDN for image download -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
+    <style>
+        /* Gmarket Sans Font Definition */
+        @font-face {
+            font-family: 'GmarketSans';
+            font-weight: 300; /* Light */
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.1/GmarketSansLight.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'GmarketSans';
+            font-weight: 700; /* Bold */
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.1/GmarketSansBold.woff') format('woff');
+        }
+
+        /* 1. 1:1 반응형 컨테이너 */
+        .aspect-ratio-square {
+            width: 100%;
+            padding-bottom: 100%; /* 1:1 비율 유지 */
+            position: relative;
+            max-width: 1024px; /* 최대 크기 제한 */
+            max-height: 1024px;
+        }
+        
+        /* 템플릿 영역 */
+        #template-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            
+            background-color: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'GmarketSans', sans-serif;
+            overflow: hidden; 
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        /* 템플릿 배경 이미지 */
+        #template-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            opacity: 0.8; 
+        }
+
+        /* 템플릿 텍스트 스타일 */
+        .text-layer {
+            position: relative;
+            z-index: 10;
+            width: 90%; 
+            text-align: center;
+        }
+
+        /* 폰트 크기 및 간격 수정 (0.6배 적용) */
+        #text-main-title {
+            font-size: 60px; /* 기존 100px -> 60px */
+            font-weight: 700;
+            line-height: 1.2;
+            margin-top: 10px; /* 간격 줄임 */
+            margin-bottom: 20px; /* 간격 줄임 */
+        }
+        #text-episode, #text-hashtag-group {
+            font-size: 20px; /* 기존 32px -> 20px */
+            font-weight: 300;
+        }
+        #text-episode {
+            margin-bottom: 10px; /* 간격 줄임 */
+        }
+        #text-footer {
+            position: absolute;
+            bottom: 20px; /* 기존 40px -> 20px (아래로 이동) */
+            font-size: 18px; /* 기존 30px -> 18px */
+            font-weight: 300;
+        }
+
+        /* 텍스트 그림자 효과 */
+        .shadow-on {
+            text-shadow: 3px 3px 5px rgba(0, 0, 0, 0.4); /* 폰트 크기에 맞게 그림자 크기도 조정 */
+        }
+
+        /* 크롭 모달용 커스텀 스타일 */
+        #cropper-modal img {
+            max-width: 100%;
+            display: block;
+        }
+
+        /* 2. 토글 스위치 커스텀 스타일 */
+        .toggle-checkbox {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-label {
+            position: relative;
+            display: block;
+            overflow: hidden;
+            height: 24px; 
+            width: 44px; 
+            border-radius: 9999px;
+            background-color: #d1d5db; /* Gray-300 unchecked */
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .toggle-label:after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            border-radius: 9999px;
+            background: #ffffff;
+            transition: transform 0.2s ease-in-out;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #4f46e5; /* Indigo checked */
+        }
+        .toggle-checkbox:checked + .toggle-label:after {
+            transform: translateX(20px); 
+        }
+    </style>
+</head>
+<body class="bg-gray-50 flex justify-center p-8 min-h-screen">
+    <div id="app" class="flex flex-col lg:flex-row gap-10 max-w-7xl w-full">
+
+        <!-- 입력 패널 (좌측) -->
+        <div class="lg:w-1/3 w-full p-6 bg-white shadow-xl rounded-xl h-fit sticky top-8">
+            <h1 class="text-3xl font-bold mb-6 text-gray-800">템플릿 생성기 설정</h1>
+            <p class="text-sm text-gray-500 mb-8">템플릿은 1024x1024 정사각형으로 제작됩니다.</p>
+
+            <!-- 이미지 업로드 -->
+            <div class="mb-6 border-b pb-4">
+                <label class="block text-lg font-medium text-gray-700 mb-2">1. 배경 사진 업로드</label>
+                <input type="file" id="image-upload" accept="image/*" class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer">
+                <p class="mt-2 text-xs text-gray-500">업로드 후 팝업창에서 영역을 지정해주세요.</p>
+            </div>
+
+            <!-- 텍스트 입력 및 설정 -->
+            <div class="space-y-4 border-b pb-6">
+                <h2 class="text-xl font-semibold text-gray-800">2. 텍스트 입력</h2>
+
+                <!-- 텍스트 1 (제목) -->
+                <div>
+                    <label for="text1" class="block text-sm font-medium text-gray-700">텍스트 1 (중앙 제목)</label>
+                    <input type="text" id="text1" value="(입력한 텍스트 1)" placeholder="메인 제목을 입력하세요" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+                </div>
+                <!-- 텍스트 5 (에피소드) -->
+                <div>
+                    <label for="text5" class="block text-sm font-medium text-gray-700">텍스트 5 (Episode 순서)</label>
+                    <div class="flex mt-1">
+                        <span class="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">Episode:</span>
+                        <input type="text" id="text5" value="001" placeholder="순서 (예: 001)" class="block w-full rounded-none rounded-r-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+                    </div>
+                </div>
+                <!-- 텍스트 2, 3, 4 (해시태그) -->
+                <div class="grid grid-cols-3 gap-3">
+                    <label class="col-span-3 block text-sm font-medium text-gray-700">텍스트 2, 3, 4 (해시태그, 자동 # 추가)</label>
+                    <input type="text" id="text2" value="키워드1" placeholder="해시태그 1" class="col-span-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border text-sm">
+                    <input type="text" id="text3" value="키워드2" placeholder="해시태그 2" class="col-span-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border text-sm">
+                    <input type="text" id="text4" value="키워드3" placeholder="해시태그 3" class="col-span-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border text-sm">
+                </div>
+            </div>
+
+            <!-- 색상 및 효과 설정 -->
+            <div class="space-y-4 pt-6">
+                <h2 class="text-xl font-semibold text-gray-800">3. 스타일 설정</h2>
+                
+                <!-- 텍스트 색상 -->
+                <div class="flex items-center space-x-4">
+                    <label for="text-color" class="text-sm font-medium text-gray-700">텍스트 색상 (RGB)</label>
+                    <input type="color" id="text-color-picker" value="#ffffff" class="w-8 h-8 rounded-full border-none cursor-pointer">
+                    <input type="text" id="text-color-hex" value="#ffffff" class="w-28 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border text-sm">
+                </div>
+
+                <!-- 그림자 효과 토글 -->
+                <div class="flex items-center justify-between">
+                    <label for="shadow-toggle" class="text-sm font-medium text-gray-700">그림자 효과 적용 (밝은 배경 대비)</label>
+                    <div class="relative inline-block w-11 mr-2 align-middle select-none">
+                        <input type="checkbox" name="shadow" id="shadow-toggle" class="toggle-checkbox"/>
+                        <label for="shadow-toggle" class="toggle-label"></label>
+                    </div>
+                </div>
+
+                <!-- 다운로드 버튼 -->
+                <button id="download-button" class="mt-8 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-150 ease-in-out shadow-lg">
+                    템플릿 이미지 다운로드 (PNG)
+                </button>
+                <div id="message-box" class="mt-4 text-center text-sm text-red-500 hidden"></div>
+            </div>
+
+        </div>
+
+        <!-- 미리보기 패널 (우측) -->
+        <div class="lg:w-2/3 w-full flex justify-center items-center p-4 bg-gray-200 rounded-xl">
+            <!-- 1:1 비율 유지를 위한 컨테이너 -->
+            <div class="aspect-ratio-square">
+                <div id="template-container" class="transition-all duration-300">
+                    <div id="template-background"></div>
+                    
+                    <div class="text-layer flex flex-col items-center justify-center h-full">
+                        <!-- 상단 에피소드 -->
+                        <p id="text-episode" class="font-light">Episode: <span id="text5-content">001</span></p>
+                        
+                        <!-- 중앙 메인 제목 -->
+                        <h1 id="text-main-title" class="font-bold whitespace-pre-wrap">(입력한 텍스트 1)</h1>
+                        
+                        <!-- 하단 해시태그 그룹 -->
+                        <div id="text-hashtag-group" class="font-light whitespace-pre-wrap flex flex-wrap justify-center space-x-8">
+                            <span id="text2-content">#키워드1</span>
+                            <span id="text3-content">#키워드2</span>
+                            <span id="text4-content">#키워드3</span>
+                        </div>
+                    </div>
+
+                    <!-- 맨 하단 고정 문구 -->
+                    <p id="text-footer" class="font-light">TEL : 010-8572-1374</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 이미지 크롭 모달 (Cropper.js) -->
+    <div id="cropper-modal" class="fixed inset-0 bg-black bg-opacity-75 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <h2 class="text-2xl font-bold mb-4">이미지 크롭 영역 지정 (1:1 비율)</h2>
+            <div class="flex-grow min-h-0 mb-4 overflow-hidden">
+                <img id="image-to-crop" src="" alt="크롭할 이미지" class="w-full">
+            </div>
+            <button id="crop-button" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition duration-150">
+                이 영역으로 배경 설정
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // DOM 요소 맵핑
+        const $ = (selector) => document.querySelector(selector);
+        
+        // 입력 요소
+        const textInputs = ['text1', 'text2', 'text3', 'text4', 'text5'].map(id => $(`#${id}`));
+        const imageUpload = $('#image-upload');
+        const colorPicker = $('#text-color-picker');
+        const colorHexInput = $('#text-color-hex');
+        const shadowToggle = $('#shadow-toggle');
+        const downloadButton = $('#download-button');
+        const messageBox = $('#message-box');
+
+        // 미리보기 요소
+        const templateContainer = $('#template-container');
+        const templateBackground = $('#template-background');
+        const textElements = {
+            mainTitle: $('#text-main-title'),
+            episode: $('#text5-content'),
+            hashtag2: $('#text2-content'),
+            hashtag3: $('#text3-content'),
+            hashtag4: $('#text4-content'),
+            footer: $('#text-footer')
+        };
+
+        // 크롭 모달 관련 요소
+        const cropperModal = $('#cropper-modal');
+        const imageToCrop = $('#image-to-crop');
+        const cropButton = $('#crop-button');
+
+        // Cropper.js 인스턴스 저장 변수
+        let cropperInstance = null;
+        // 최종 크롭된 이미지 데이터 URL
+        let croppedImageUrl = null;
+
+        /**
+         * 입력된 값들을 기반으로 템플릿 미리보기를 실시간으로 업데이트합니다.
+         */
+        function updatePreview() {
+            // 1. 텍스트 내용 업데이트
+            textElements.mainTitle.textContent = $('#text1').value || '(입력한 텍스트 1)';
+            
+            // Episode는 "Episode: "가 자동으로 앞에 붙습니다.
+            textElements.episode.textContent = $('#text5').value || '001';
+            
+            // 해시태그는 "#"가 자동으로 앞에 붙고, 띄어쓰기 3칸 간격을 위해 Tailwind space-x-8 유지
+            textElements.hashtag2.textContent = $('#text2').value ? `#${$('#text2').value}` : '';
+            textElements.hashtag3.textContent = $('#text3').value ? `#${$('#text3').value}` : '';
+            textElements.hashtag4.textContent = $('#text4').value ? `#${$('#text4').value}` : '';
+
+            // 2. 텍스트 색상 업데이트
+            const color = colorHexInput.value;
+            templateContainer.style.color = color;
+            
+            // 3. 그림자 효과 업데이트
+            // Note: Episode 텍스트 전체(Episode: 001)에 그림자 효과를 적용하기 위해 parentNode를 사용합니다.
+            const textNodes = [
+                textElements.mainTitle,
+                textElements.episode.closest('p'), // Episode 텍스트 전체 (p#text-episode)
+                textElements.hashtag2.closest('div'), // 해시태그 그룹 (div#text-hashtag-group)
+                textElements.footer
+            ];
+
+            textNodes.forEach(node => {
+                if (shadowToggle.checked) {
+                    node.classList.add('shadow-on');
+                } else {
+                    node.classList.remove('shadow-on');
+                }
+            });
+        }
+
+        /**
+         * Cropper 모달을 열고 이미지 객체를 초기화합니다.
+         * @param {string} imageSrc - 크롭할 이미지의 데이터 URL
+         */
+        function openCropperModal(imageSrc) {
+            imageToCrop.src = imageSrc;
+            cropperModal.classList.remove('hidden');
+            cropperModal.classList.add('flex');
+
+            if (cropperInstance) {
+                cropperInstance.destroy();
+            }
+
+            // Cropper.js 초기화: 1:1 비율 고정
+            cropperInstance = new Cropper(imageToCrop, {
+                aspectRatio: 1,
+                viewMode: 1,
+                dragMode: 'move',
+                autoCropArea: 1,
+                responsive: true,
+                movable: true,
+                zoomable: true,
+                wheelZoomRatio: 0.1,
+            });
+        }
+
+        /**
+         * Cropper 모달에서 '이 영역으로 배경 설정' 버튼 클릭 시
+         */
+        cropButton.addEventListener('click', () => {
+            if (cropperInstance) {
+                // 크롭된 이미지를 1024x1024 캔버스로 추출
+                croppedImageUrl = cropperInstance.getCroppedCanvas({
+                    width: 1024,
+                    height: 1024,
+                    imageSmoothingEnabled: true,
+                    imageSmoothingQuality: 'high',
+                }).toDataURL('image/jpeg');
+
+                // 템플릿 배경에 설정
+                templateBackground.style.backgroundImage = `url('${croppedImageUrl}')`;
+                
+                // 모달 닫기
+                cropperModal.classList.add('hidden');
+                cropperModal.classList.remove('flex');
+            }
+        });
+
+        // ----------------------------------------------------
+        // 1. 이벤트 리스너 등록
+        // ----------------------------------------------------
+
+        // 텍스트/효과 입력 변경 시 미리보기 업데이트
+        [...textInputs, shadowToggle].forEach(input => {
+            input.addEventListener('input', updatePreview);
+        });
+
+        // 텍스트 색상 변경 (Picker -> HexInput)
+        colorPicker.addEventListener('input', (e) => {
+            colorHexInput.value = e.target.value.toUpperCase();
+            updatePreview();
+        });
+
+        // 텍스트 색상 변경 (HexInput -> Picker)
+        colorHexInput.addEventListener('input', (e) => {
+            if (e.target.value.length === 7 && e.target.value.startsWith('#')) {
+                colorPicker.value = e.target.value;
+            }
+            updatePreview();
+        });
+
+        // 이미지 파일 업로드 처리 (크롭 모달 열기)
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    openCropperModal(event.target.result);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // 다운로드 버튼 클릭 처리 (html2canvas 사용)
+        downloadButton.addEventListener('click', () => {
+            messageBox.textContent = '이미지를 준비 중입니다... 잠시만 기다려주세요.';
+            messageBox.classList.remove('hidden');
+            downloadButton.disabled = true;
+
+            // 템플릿 컨테이너 (1024x1024 고정 영역)을 캡처
+            html2canvas(templateContainer, {
+                // 1:1 비율로 캡처 (Canvas는 HTML 요소를 캡처하기 때문에, 이 설정이 최종 이미지 사이즈를 결정합니다.)
+                scale: 1, 
+                logging: false,
+                useCORS: true,
+                // 스크롤 이슈 방지 (템플릿 컨테이너 크롭)
+                width: 1024, 
+                height: 1024,
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'custom_template_1024x1024.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+
+                messageBox.textContent = '다운로드가 완료되었습니다!';
+                setTimeout(() => {
+                    messageBox.classList.add('hidden');
+                }, 3000);
+            }).catch(error => {
+                console.error("HTML to Canvas failed:", error);
+                messageBox.textContent = '이미지 생성 중 오류가 발생했습니다. 콘솔을 확인해주세요.';
+            }).finally(() => {
+                downloadButton.disabled = false;
+            });
+        });
+
+        // ----------------------------------------------------
+        // 2. 초기화 및 기본 템플릿 설정
+        // ----------------------------------------------------
+        
+        // 초기화 함수
+        function init() {
+            // 기본 템플릿 값으로 미리보기 업데이트
+            updatePreview();
+            
+            // 기본 폰트 색상 (흰색) 설정
+            templateContainer.style.color = colorHexInput.value;
+
+            // 기본 배경 이미지 설정 (검정색)
+            templateBackground.style.backgroundColor = '#000000';
+            
+            // 크롭 모달 닫기 기능 추가 (ESC 키)
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !cropperModal.classList.contains('hidden')) {
+                    cropperModal.classList.add('hidden');
+                    cropperModal.classList.remove('flex');
+                }
+            });
+        }
+
+        // 페이지 로드 후 초기화 실행
+        window.onload = init;
+    </script>
+</body>
+</html>
